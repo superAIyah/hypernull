@@ -22,6 +22,8 @@ import ru.croccode.hypernull.message.Move;
 import ru.croccode.hypernull.message.Register;
 import ru.croccode.hypernull.message.Update;
 
+import javax.swing.*;
+
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
@@ -34,21 +36,39 @@ public class StarterBot implements Bot {
 	private Offset moveOffset;
 
 	private int moveCounter = 0;
+	//info from matchStarted
+	Point[] blocks;
+	Point[] coins;
+	Map<Integer, Point> bots;
 
 	//MY PART OF BOT
-	final int LEN_CYCLE = 3;
+	final int LEN_CYCLE = 5;
 	final int DEPTH_COUNTING = 3;
+	final int PERIOD = 30;
+	final int TRAVEL_STEPS = 7;
 
 	MatchStarted ms; // вся инфа по матчу
 	Integer[][] exploreMap; // карта исследователя: 0 - стена, 1 - свободно
 	Integer[][] vision; // карта видимого: 0 - стена, 1 - свободно, 2 - монета, 3 - бот, 8 - мы
+	//взвешивание:
+	int[][] weightedMap;
 	Size mapSize;
 	int w;
 	int h;
 	int vr;
 	int vr2;
+	int mr;
+	int mr2;
 	LinkedList<Point> cycle;
 	Point nextToExplore;
+
+	boolean timeToTravel(int num) {
+		return  (num % (PERIOD + TRAVEL_STEPS) >= PERIOD);
+	}
+
+	boolean firstTimeTravel(int num) {
+		return (num % (PERIOD + TRAVEL_STEPS) == PERIOD);
+	}
 
 	void setVision(Point p, int type) { // обозначить объект
 		vision[p.y()][p.x()] = type;
@@ -91,7 +111,7 @@ public class StarterBot implements Bot {
 
 	boolean clearWay(Point us, Offset step) { // будем обходить блоки на расстоянии vision / 2
 		Point p2 = us.apply(step, mapSize);
-		while (us.offsetTo(p2, mapSize).length2() <= vr2 / 2) {
+		while (us.offsetTo(p2, mapSize).length2() <= mr2) {
 			if (getVision(p2) == 0) { // если видим блок на прямой этого пути
 				return false; // то путь по данному смещению не чист
 			}
@@ -114,18 +134,22 @@ public class StarterBot implements Bot {
 		return bestStep;
 	}
 
-	Move explore(Point us) { // команда "исследовать" карту
+	Move explore(Point us, Point farestWeighted) { // команда "исследовать" карту
 		int mindist = 1000;
 		nextToExplore = new Point(0, 0);
-		for (int i = 0; i < h; i++) { // найдем самую близкую неизведанную точку
-			for (int j = 0; j < w; j++) {
-				Point p2 = new Point(j, i);
-				int dist = us.offsetTo(p2, mapSize).length2();
-				if (exploreMap[i][j] == 0 && dist < mindist && !cycle.contains(p2)) {
-					mindist = dist;
-					nextToExplore = p2;
+		if (farestWeighted == null) // если мы хотим не взвешенно найти самую удаленную точку
+			for (int i = 0; i < h; i++) { // найдем самую близкую неизведанную точку
+				for (int j = 0; j < w; j++) {
+					Point p2 = new Point(j, i);
+					int dist = us.offsetTo(p2, mapSize).length2();
+					if (exploreMap[i][j] == 0 && dist < mindist && !cycle.contains(p2)) {
+						mindist = dist;
+						nextToExplore = p2;
+					}
 				}
 			}
+		else {
+			nextToExplore = farestWeighted; // точка во взвшенное удаленной области
 		}
 		ArrayList<Offset> vars = variants(us);
 		ArrayList<Offset> clearVars = new ArrayList<>();
@@ -148,8 +172,9 @@ public class StarterBot implements Bot {
 
 		while (!queue.isEmpty()) {
 			Point p1 = queue.poll();
-			if (ids.containsKey(p1)) { // если мы находимся на точке, которая является монетой
-				distCoins[ourId][ids.get(p1)] = dist[p1.y()][p1.x()];
+			for (Point p : ids.keySet()) {
+				if (p.offsetTo(p1, mapSize).length2() <= mr2)
+					distCoins[ourId][ids.get(p)] = dist[p1.y()][p1.x()];
 			}
 			ArrayList<Offset> variants = variants(p1); // варианты сдвигов, чтобы не попасть в блоки/ботов/клетки за видимостью
 			for (Offset step : variants) {
@@ -161,8 +186,26 @@ public class StarterBot implements Bot {
 				}
 			}
 		}
-		System.out.println("BFS from" + us.toString() + " ID = " + ourId);
-		System.out.println(Arrays.toString(distCoins[ourId]));
+	}
+
+	int gen(int last, int n, int sum,
+			int[][] distCoins, int[] distFromBot, boolean[] used) {
+		int minDist = 1000;
+		if (n == 0) {
+			return sum;
+		}
+		for (int i = 0; i < n; i++) {
+			if (used[i])
+				continue;
+			// добавляем
+			used[i] = true;
+			if (last == -1) // шагаем от начальной точки к монете
+				minDist = min(minDist, gen(i, n - 1, sum + distFromBot[i], distCoins, distFromBot, used));
+			else // шагаем от монеты к монете
+				minDist = min(minDist, gen(i, n - 1, sum + distCoins[last][i], distCoins, distFromBot, used));
+			used[i] = false;
+		}
+		return minDist;
 	}
 
 	int SummaryDistance(Point p, int[][] distCoins, Map<Point, Integer> ids) {
@@ -172,21 +215,14 @@ public class StarterBot implements Bot {
 		int[][] distFromBot2d = new int[1][n];
 		coinsBFS(p, 0, distFromBot2d, ids);
 		int[] distFromBot = distFromBot2d[0];
-		int minDistance = 1000;
 
-		// замнеить в будущем на рекурсивный перебор DEPTH_COUNTING точек 0_0
-		for (int c1 = 0; c1 < n; c1++)
-			for (int c2 = 0; c2 < n; c2++)
-				for (int c3 = 0; c3 < n; c3++) {
-					int dist = distFromBot[c1] + distCoins[c1][c2] + distCoins[c2][c3];
-					minDistance = min(minDistance, dist);
-				}
-		return minDistance;
+		int depth = min(n, DEPTH_COUNTING);
+		return gen(-1, depth, 0, distCoins, distFromBot, new boolean[n]);
 	}
 
 	Move safeEat(Point us, Point[] coins) {
 		if (coins == null || coins.length == 0)
-			return explore(us);
+			return explore(us, null);
 
 		int n = coins.length;
 		HashMap<Point, Integer> ids = new HashMap<Point, Integer>(); // проиндексируем каждую точку от 0 до size - 1
@@ -213,26 +249,68 @@ public class StarterBot implements Bot {
 		}
 		Move move = new Move();
 		move.setOffset(bestStep);
-		System.out.println("MIN DIST FOR GETTING 3 coins:");
-		System.out.println(minDist);
+		/*System.out.println("MIN DIST FOR GETTING 3 coins:");
+		System.out.println(minDist);*/
 		return move;
+	}
 
+	void fillWeightedMap(Point us) {
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+				int length2 = us.offsetTo(new Point(j, i), mapSize).length2();
+				if (length2 <= mr2)
+					weightedMap[i][j] = 0;
+				else if (length2 <= vr2)
+					weightedMap[i][j] = 1;
+				else
+					weightedMap[i][j] += 1; // точки, которые мы не видели, становятся более актуальными
+			}
+		}
+	}
 
-		// найдем расстояние от бота до каждой монеты
-		/*int[][] distFromBot2d = new int[1][n];
-		coinsBFS(us, 0, distFromBot2d, ids);
-		int[] distFromBot = distFromBot2d[0];
-		System.out.println("dist FROM BOR:");
-		System.out.println(Arrays.toString(distFromBot));
-		System.out.println("COINS!:");
-		System.out.println(Arrays.toString(coins));
-		System.out.println("EXPORED!:");
-		for (int i = 0; i < n; i++) {
-				System.out.println(Arrays.toString(distCoins[i]));
-			System.out.println();
-		}*/
+	Point weightedPoint() {
+		int bestSum = -1;
+		Point bestPoint = new Point(0, 0);
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+				Point us = new Point(j, i);
+				ArrayList<Point> visible = visibleCoordinates(us);
+				int sumTmp = 0;
+				for (Point p : visible)
+					sumTmp += weightedMap[p.y()][p.x()];
+				if (sumTmp > bestSum) {
+					bestSum = sumTmp;
+					bestPoint = us;
+				}
+			}
+		}
+		return bestPoint;
+	}
 
-		//return explore(us);
+	void fillVisionExplore(Point us) {
+		// очистим зону видимости
+		for (int i = 0; i < h; i++)
+			for (int j = 0; j < w; j++)
+				Arrays.fill(vision[i], 0);
+
+		//обновим взвешенную карту мест посещения
+		ArrayList<Point> visible = visibleCoordinates(us);
+
+		for (Point p : visible) {
+			setVision(p, 1); // пусть изначально мы видим только пустые клетки
+			exploreMap[p.y()][p.x()] = 1; // отмечаем изученные клетки
+		}
+		for (Point p : blocks) { // обозначаем блоки
+			setVision(p, 0);
+		}
+		for (Point p : coins) { // обозначаем монеты
+			setVision(p, 2);
+		}
+		for (Integer key : bots.keySet()) { // обозначаем других ботов
+			setVision(bots.get(key), 3);
+		}
+		setVision(us, 8);
+
 	}
 
 	public StarterBot(MatchMode mode) {
@@ -253,11 +331,14 @@ public class StarterBot implements Bot {
 
 		vr = matchStarted.getViewRadius();
 		vr2 = vr * vr;
+		mr = matchStarted.getMiningRadius();
+		mr2 = mr * mr;
 		w = matchStarted.getMapSize().width(); // создаем крату исследователя
 		h = matchStarted.getMapSize().height();
 		mapSize = matchStarted.getMapSize();
 		exploreMap = new Integer[h][w];
 		vision = new Integer[h][w];
+		weightedMap = new int[h][w];
 		for (int i = 0; i < h; i++)
 			for (int j = 0; j < w; j++)
 				Arrays.fill(exploreMap[i], 0);
@@ -271,41 +352,47 @@ public class StarterBot implements Bot {
 		// будем в программе работать с перевернутой картой по Oy
 		// в конце необходимо будет отразить вектор перемещения относительно Oy
 		System.out.println("ROUND ------> " + upd.getRound());
-		Thread.sleep(1000);
+		if (upd.getRound() == 200)
+			System.out.println(upd.getBotCoins().get(0));
+		//Thread.sleep(1000);
 
 		// извлекаем данные в зоне видимости
-		Point[] blocks = (upd.getBlocks() != null) ? upd.getBlocks().toArray(new Point[0]) : new Point[]{};
-		Point[] coins = (upd.getCoins() != null) ? upd.getCoins().toArray(new Point[0]) : new Point[]{};
-		Map<Integer, Point> bots= upd.getBots(); // всегда будет хотя бы один бот - наш
+		blocks = (upd.getBlocks() != null) ? upd.getBlocks().toArray(new Point[0]) : new Point[]{};
+		coins = (upd.getCoins() != null) ? upd.getCoins().toArray(new Point[0]) : new Point[]{};
+		bots= upd.getBots(); // всегда будет хотя бы один бот - наш
 		Point us = bots.get(0);
-		ArrayList<Point> visible = visibleCoordinates(us);
 
 		// обновим последние три хода
 		cycle.add(us);
 		cycle.remove();
 
-		// очистим зону видимости
-		for (int i = 0; i < h; i++)
-			for (int j = 0; j < w; j++)
-				Arrays.fill(vision[i], 0);
+		// заполним карту исследования и видимости
+		fillVisionExplore(us);
 
+		//заполним взвешенную карту посещений
+		fillWeightedMap(us);
 
-		for (Point p : visible) {
-			setVision(p, 1); // пусть изначально мы видим только пустые клетки
-			exploreMap[p.y()][p.x()] = 1; // отмечаем изученные клетки
+		//если время путешествий - значит найдем самую непосещенную область и пройдем туда TRAVEL_STEPS шагов
+		if (timeToTravel(upd.getRound())) {
+			boolean target = true;
+			Move best;
+			if (firstTimeTravel(upd.getRound())) {
+				int rand = (int) (Math.random() * 100);
+				target = (rand % 2 == 0);
+			}
+			System.out.println("EXPLORE to this point!");
+			if (target) {
+				Point farest = weightedPoint();
+				System.out.println(farest);
+				best = explore(us, farest); // идем в еще неисследованную территорию
+			} else {
+				best = explore(us, null); // выбираем ближайшую неисследованную точку
+			}
+			return best;
 		}
-		for (Point p : blocks) { // обозначаем блоки
-			setVision(p, 0);
-		}
-		for (Point p : coins) { // обозначаем монеты
-			setVision(p, 2);
-		}
-		for (Integer key : bots.keySet()) { // обозначаем других ботов
-			setVision(bots.get(key), 3);
-		}
-		setVision(us, 8);
+
 		Move best = safeEat(us, coins);
-		//Move best = explore(us);
+		//Move best = explore(us, null);
 		/*output.InverseY(vision, w, h, "VISION");
 		System.out.println();
 		output.InverseY(exploreMap, w, h, "EXPLORE MAP");*/
