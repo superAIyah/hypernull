@@ -22,6 +22,9 @@ import ru.croccode.hypernull.message.Move;
 import ru.croccode.hypernull.message.Register;
 import ru.croccode.hypernull.message.Update;
 
+import static java.lang.Math.max;
+import static java.lang.Math.min;
+
 public class StarterBot implements Bot {
 
 	private static final Random rnd = new Random(System.currentTimeMillis());
@@ -34,6 +37,7 @@ public class StarterBot implements Bot {
 
 	//MY PART OF BOT
 	final int LEN_CYCLE = 3;
+	final int DEPTH_COUNTING = 3;
 
 	MatchStarted ms; // вся инфа по матчу
 	Integer[][] exploreMap; // карта исследователя: 0 - стена, 1 - свободно
@@ -51,9 +55,11 @@ public class StarterBot implements Bot {
 	}
 
 	int getVision(Point p) { // получить объект по точке
-		if (p.y() < 0 || p.x() < 0)
-			System.out.println(p.x() + " ! " + p.y());
 		return vision[p.y()][p.x()];
+	}
+
+	int getPointID(Point p) { // легкий хеш для точки
+		return (w * p.y()) + p.x();
 	}
 
 	ArrayList<Point> visibleCoordinates(Point us) { // получаем список координат видимых точек
@@ -76,7 +82,7 @@ public class StarterBot implements Bot {
 				if (x == 0 && y == 0)
 					continue;
 				Offset next = new Offset(x, y); // рассматриваем следующий шаг
-				if (getVision(us.apply(next, mapSize)) != 0) // если это не блок
+				if (getVision(us.apply(next, mapSize)) != 0 && getVision(us.apply(next, mapSize)) != 3 ) // если это не блок и не бот
 					vars.add(next); // добавим в возможные варианты хода
 			}
 		}
@@ -121,10 +127,7 @@ public class StarterBot implements Bot {
 				}
 			}
 		}
-		System.out.println(nextToExplore);
 		ArrayList<Offset> vars = variants(us);
-		System.out.println("VARIANTS FUNC:");
-		System.out.println(vars.size());
 		ArrayList<Offset> clearVars = new ArrayList<>();
 		for (Offset step : vars)
 			if (clearWay(us, step))
@@ -133,7 +136,103 @@ public class StarterBot implements Bot {
 		Move move  = new Move();
 		move.setOffset(best);
 		return move;
+	}
 
+	void coinsBFS(Point us, int ourId, int[][] distCoins, Map<Point, Integer> ids) {
+		int[][] dist = new int[h][w]; // локальная карта расстояний для bfs
+		boolean[][] used = new boolean[h][w]; // использованный точки для bfs
+
+		LinkedList<Point> queue = new LinkedList<>();
+		queue.add(us); // стартовая точка
+		used[us.y()][us.x()] = true;
+
+		while (!queue.isEmpty()) {
+			Point p1 = queue.poll();
+			if (ids.containsKey(p1)) { // если мы находимся на точке, которая является монетой
+				distCoins[ourId][ids.get(p1)] = dist[p1.y()][p1.x()];
+			}
+			ArrayList<Offset> variants = variants(p1); // варианты сдвигов, чтобы не попасть в блоки/ботов/клетки за видимостью
+			for (Offset step : variants) {
+				Point p2 = p1.apply(step, mapSize); // следующая вершина BFS
+				if (!used[p2.y()][p2.x()]) {
+					queue.add(p2);
+					used[p2.y()][p2.x()] = true;
+					dist[p2.y()][p2.x()] = dist[p1.y()][p1.x()] + 1;
+				}
+			}
+		}
+		System.out.println("BFS from" + us.toString() + " ID = " + ourId);
+		System.out.println(Arrays.toString(distCoins[ourId]));
+	}
+
+	int SummaryDistance(Point p, int[][] distCoins, Map<Point, Integer> ids) {
+		if (cycle.contains(p)) // чтобы не зациклиться
+			return 1000;
+		int n = distCoins[0].length;
+		int[][] distFromBot2d = new int[1][n];
+		coinsBFS(p, 0, distFromBot2d, ids);
+		int[] distFromBot = distFromBot2d[0];
+		int minDistance = 1000;
+
+		// замнеить в будущем на рекурсивный перебор DEPTH_COUNTING точек 0_0
+		for (int c1 = 0; c1 < n; c1++)
+			for (int c2 = 0; c2 < n; c2++)
+				for (int c3 = 0; c3 < n; c3++) {
+					int dist = distFromBot[c1] + distCoins[c1][c2] + distCoins[c2][c3];
+					minDistance = min(minDistance, dist);
+				}
+		return minDistance;
+	}
+
+	Move safeEat(Point us, Point[] coins) {
+		if (coins == null || coins.length == 0)
+			return explore(us);
+
+		int n = coins.length;
+		HashMap<Point, Integer> ids = new HashMap<Point, Integer>(); // проиндексируем каждую точку от 0 до size - 1
+		for (int i = 0; i < n; i++)
+			ids.put(coins[i], i);
+		int[][] distCoins = new int[n][n]; // двуммерный массив расстояний
+
+		// Пусть N - площадь обозреваемого квадрата (около 36)
+		// переберем все монеты и найдем расстоние от каждой до всех O(N^2)
+		for (int i = 0; i < n; i++) {
+			coinsBFS(coins[i], i, distCoins, ids);
+		}
+
+		ArrayList<Offset> steps = variants(us); // варианты куда можно пойти
+		Offset bestStep = new Offset(1, 1);
+		int minDist = 1000;
+		for (Offset step : steps) {
+			Point p2 = us.apply(step, mapSize);
+			int distTmp = SummaryDistance(p2, distCoins, ids);
+			if (distTmp < minDist) {
+				minDist = distTmp;
+				bestStep = step;
+			}
+		}
+		Move move = new Move();
+		move.setOffset(bestStep);
+		System.out.println("MIN DIST FOR GETTING 3 coins:");
+		System.out.println(minDist);
+		return move;
+
+
+		// найдем расстояние от бота до каждой монеты
+		/*int[][] distFromBot2d = new int[1][n];
+		coinsBFS(us, 0, distFromBot2d, ids);
+		int[] distFromBot = distFromBot2d[0];
+		System.out.println("dist FROM BOR:");
+		System.out.println(Arrays.toString(distFromBot));
+		System.out.println("COINS!:");
+		System.out.println(Arrays.toString(coins));
+		System.out.println("EXPORED!:");
+		for (int i = 0; i < n; i++) {
+				System.out.println(Arrays.toString(distCoins[i]));
+			System.out.println();
+		}*/
+
+		//return explore(us);
 	}
 
 	public StarterBot(MatchMode mode) {
@@ -171,8 +270,8 @@ public class StarterBot implements Bot {
 	public Move onUpdate(Update upd) throws InterruptedException { // ---CHANGE---
 		// будем в программе работать с перевернутой картой по Oy
 		// в конце необходимо будет отразить вектор перемещения относительно Oy
-
-		Thread.sleep(300);
+		System.out.println("ROUND ------> " + upd.getRound());
+		Thread.sleep(1000);
 
 		// извлекаем данные в зоне видимости
 		Point[] blocks = (upd.getBlocks() != null) ? upd.getBlocks().toArray(new Point[0]) : new Point[]{};
@@ -205,19 +304,11 @@ public class StarterBot implements Bot {
 			setVision(bots.get(key), 3);
 		}
 		setVision(us, 8);
-		Move best = explore(us);
-		System.out.println("CHANGES");
-		System.out.println(best.getOffset().dx());
-		System.out.println(best.getOffset().dy());
-		System.out.println("OK");
-		int sum = 0;
-		for (Integer[] mas : exploreMap)
-			for (int a : mas)
-				sum += a;
-		System.out.println("TOTAL FOUND: "+sum);
-		output.InverseY(vision, w, h, "VISION");
+		Move best = safeEat(us, coins);
+		//Move best = explore(us);
+		/*output.InverseY(vision, w, h, "VISION");
 		System.out.println();
-		output.InverseY(exploreMap, w, h, "EXPLORE MAP");
+		output.InverseY(exploreMap, w, h, "EXPLORE MAP");*/
 		return best;
 		/*if (moveOffset == null || moveCounter > 5 + rnd.nextInt(5)) {
 			moveOffset = new Offset(
