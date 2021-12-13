@@ -17,7 +17,8 @@ import ru.croccode.hypernull.domain.MatchMap;
 import ru.croccode.hypernull.domain.MatchMode;
 import ru.croccode.hypernull.io.SocketSession;
 import ru.croccode.hypernull.map.MapRegistry;
-import ru.croccode.hypernull.map.RandomMapRegistry;
+import ru.croccode.hypernull.map.MapStore;
+import ru.croccode.hypernull.map.RandomMap;
 import ru.croccode.hypernull.match.Match;
 import ru.croccode.hypernull.match.MatchConfig;
 import ru.croccode.hypernull.match.MatchListener;
@@ -38,13 +39,14 @@ public class HyperNull implements Runnable, Closeable {
 
 	public HyperNull(Properties properties) throws IOException {
 		Check.notNull(properties);
-		mapRegistry = new RandomMapRegistry(); // TODO implement MapRegistry
 		// start server
 		int serverPort = Integer.parseInt(
 				properties.getProperty("server.port", "2021"));
-
 		matchLogsFolder = properties.getProperty("match.log.folder","./matchlogs/");
 		System.out.println("Match logs folder was set to: " + matchLogsFolder);
+		String mapsFolder = properties.getProperty("maps.folder","./maps/");
+		System.out.println("Maps folder was set to: " + mapsFolder);
+		mapRegistry = MapStore.load(Paths.get(mapsFolder));
 		this.server = new Server(serverPort);
 		System.out.println("Server started on port: " + serverPort);
 		System.out.println("Server logs output: STDOUT");
@@ -92,6 +94,10 @@ public class HyperNull implements Runnable, Closeable {
 
 		String matchId = MatchId.nextId();
 		MatchMap map = mapRegistry.randomMap(numBots);
+		if (map == null) {
+			// generate random map
+			map = new RandomMap(numBots);
+		}
 		MatchConfig config = buildMatchConfig(mode, map);
 		try (MatchFileLogger<Integer> fileLogger = new MatchFileLogger<>(matchId, this.matchLogsFolder)) {
 			List<MatchListener<Integer>> listeners = Arrays.asList(
@@ -105,7 +111,7 @@ public class HyperNull implements Runnable, Closeable {
 
 	private MatchConfig buildMatchConfig(MatchMode mode, MatchMap map) {
 		return MatchConfig.newBuilder()
-				.setNumRounds(200)
+				.setNumRounds(500)
 				.setMode(mode)
 				.setMoveTimeLimit(5_000L)
 				.setCoinSpawnPeriod(5)
