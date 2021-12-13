@@ -1,0 +1,156 @@
+match
+match_id 1639152662879_bj
+match_time 1639152662891
+num_bots 1
+##MatchConfig
+mode FRIENDLY
+num_rounds 200
+random_seed 42
+move_time_limit 1000
+coin_spawn_period 5
+coin_spawn_volume 2
+##MapConfig
+map_size 74 25
+view_radius 5
+mining_radius 1
+attack_radius 3
+block 0 0
+block 46 0
+block 47 0
+block 48 0
+block 49 0
+block 50 0
+block 51 0
+block 52 0
+block 70 0
+block 71 0
+block 72 0
+block 73 0
+block 0 1
+block 46 1
+block 47 1
+block 48 1
+block 49 1
+block 50 1
+block 51 1
+block 52 1
+block 70 1
+block 71 1
+block 72 1
+block 73 1
+block 0 2
+block 46 2
+block 47 2
+block 48 2
+block 49 2
+block 50 2
+block 51 2
+block 52 2
+block 70 2
+block 71 2
+block 72 2
+block 73 2
+block 0 3
+block 70 3
+block 71 3
+block 72 3
+block 73 3
+block 20 7
+block 21 7
+block 22 7
+block 23 7
+block 24 7
+block 20 8
+block 21 8
+block 22 8
+block 23 8
+block 24 8
+block 20 9
+block 21 9
+block 22 9
+block 23 9
+block 24 9
+block 58 10
+block 59 10
+block 60 10
+block 58 11
+block 59 11
+block 60 11
+block 13 12
+block 14 12
+block 15 12
+block 16 12
+block 17 12
+block 58 12
+block 59 12
+block 60 12
+block 13 13
+block 14 13
+block 15 13
+block 16 13
+block 17 13
+block 18 13
+block 19 13
+block 58 13
+block 59 13
+block 60 13
+block 18 14
+block 19 14
+block 58 14
+block 59 14
+block 60 14
+block 18 15
+block 19 15
+block 18 16
+block 19 16
+block 18 17
+block 19 17
+block 18 18
+block 19 18
+block 18 19
+block 19 19
+block 46 22
+block 47 22
+block 48 22
+block 49 22
+block 50 22
+block 51 22
+block 52 22
+block 46 23
+block 47 23
+block 48 23
+block 49 23
+block 50 23
+block 51 23
+block 52 23
+block 46 24
+block 47 24
+block 48 24
+block 49 24
+block 50 24
+block 51 24
+block 52 24
+##BotsAndCoinsInfo
+bot_name 0 starter-bot
+bot 0 61 14
+bot_coins 0 0
+coin 14 14
+coin 59 9
+round 1
+round 2
+round 3
+round 4
+round 5
+coin 2 9
+coin 71 15
+round 6
+round 7
+round 8
+round 9
+round 10
+coin 45 0
+coin 28 24
+round 11
+round 12
+match_over 0
+round 13

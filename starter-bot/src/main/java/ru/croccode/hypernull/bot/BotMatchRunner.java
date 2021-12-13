@@ -31,7 +31,7 @@ public class BotMatchRunner implements Runnable {
 	public void run() {
 		try {
 			runImpl();
-		} catch (IOException e) {
+		} catch (IOException | InterruptedException e) {
 			e.printStackTrace();
 			try {
 				session.close();
@@ -40,7 +40,7 @@ public class BotMatchRunner implements Runnable {
 		}
 	}
 
-	public void runImpl() throws IOException {
+	public void runImpl() throws IOException, InterruptedException {
 		// wait for a server hello
 		Hello hello = session.read(Hello.class);
 		// send register
@@ -58,11 +58,14 @@ public class BotMatchRunner implements Runnable {
 				break;
 			}
 			if (message instanceof Update) {
+				/*if (((Update)message).getRound() == 10) //
+					break;*/
 				Move move = bot.onUpdate((Update)message);
 				if (move == null) {
 					move = new Move();
 					move.setOffset(new Offset(0, 0));
 				}
+				//Thread.sleep(300_000);
 				session.write(move);
 			}
 		}

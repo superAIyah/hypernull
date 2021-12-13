@@ -107,9 +107,9 @@ public class HyperNull implements Runnable, Closeable {
 		return MatchConfig.newBuilder()
 				.setNumRounds(200)
 				.setMode(mode)
-				.setMoveTimeLimit(1_000L)
+				.setMoveTimeLimit(5_000L)
 				.setCoinSpawnPeriod(5)
-				.setCoinSpawnVolume(2)
+				.setCoinSpawnVolume(10)
 				.build();
 	}
 

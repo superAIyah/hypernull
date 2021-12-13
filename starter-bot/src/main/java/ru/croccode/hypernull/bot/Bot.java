@@ -13,7 +13,7 @@ public interface Bot {
 
 	void onMatchStarted(MatchStarted matchStarted);
 
-	Move onUpdate(Update update);
+	Move onUpdate(Update update) throws InterruptedException;
 
 	void onMatchOver(MatchOver matchOver);
 }
