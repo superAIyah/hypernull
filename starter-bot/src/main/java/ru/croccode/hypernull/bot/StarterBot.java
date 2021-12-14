@@ -111,7 +111,7 @@ public class StarterBot implements Bot {
 
 	boolean clearWay(Point us, Offset step) { // будем обходить блоки на расстоянии vision / 2
 		Point p2 = us.apply(step, mapSize);
-		while (us.offsetTo(p2, mapSize).length2() <= mr2) {
+		while (us.offsetTo(p2, mapSize).length2() <= vr2 / 2) {
 			if (getVision(p2) == 0) { // если видим блок на прямой этого пути
 				return false; // то путь по данному смещению не чист
 			}
@@ -156,6 +156,9 @@ public class StarterBot implements Bot {
 		for (Offset step : vars)
 			if (clearWay(us, step))
 				clearVars.add(step);
+		if (clearVars.isEmpty())
+			clearVars.addAll(vars);
+
 		Offset best = findBest(us, clearVars);
 		Move move  = new Move();
 		move.setOffset(best);
@@ -344,7 +347,7 @@ public class StarterBot implements Bot {
 				Arrays.fill(exploreMap[i], 0);
 		cycle = new LinkedList<>();
 		for (int i = 0; i < LEN_CYCLE; i++)
-			cycle.add(new Point(-1, -1));
+			cycle.add(new Point(-1, -1));;
 	}
 
 	@Override
@@ -352,8 +355,6 @@ public class StarterBot implements Bot {
 		// будем в программе работать с перевернутой картой по Oy
 		// в конце необходимо будет отразить вектор перемещения относительно Oy
 		System.out.println("ROUND ------> " + upd.getRound());
-		if (upd.getRound() == 200)
-			System.out.println(upd.getBotCoins().get(0));
 		//Thread.sleep(1000);
 
 		// извлекаем данные в зоне видимости
@@ -381,7 +382,7 @@ public class StarterBot implements Bot {
 				target = (rand % 2 == 0);
 			}
 			System.out.println("EXPLORE to this point!");
-			if (target) {
+			if (true) {
 				Point farest = weightedPoint();
 				System.out.println(farest);
 				best = explore(us, farest); // идем в еще неисследованную территорию
@@ -390,12 +391,14 @@ public class StarterBot implements Bot {
 			}
 			return best;
 		}
-
+		output.InverseY(exploreMap, w, h,"Explore");
 		Move best = safeEat(us, coins);
 		//Move best = explore(us, null);
 		/*output.InverseY(vision, w, h, "VISION");
 		System.out.println();
 		output.InverseY(exploreMap, w, h, "EXPLORE MAP");*/
+		if (upd.getRound() == 500)
+			System.out.println(upd.getBotCoins().get(0));
 		return best;
 		/*if (moveOffset == null || moveCounter > 5 + rnd.nextInt(5)) {
 			moveOffset = new Offset(
