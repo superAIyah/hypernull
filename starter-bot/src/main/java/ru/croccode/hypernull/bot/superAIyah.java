@@ -447,7 +447,7 @@ public class superAIyah implements Bot {
 	public Move onUpdate(Update upd) throws InterruptedException { // ---CHANGE---
 		// будем в программе работать с перевернутой картой по Oy
 		// в конце необходимо будет отразить вектор перемещения относительно Oy
-		System.out.println("ROUND ------> " + upd.getRound());
+		//System.out.println("ROUND ------> " + upd.getRound());
 		//Thread.sleep(1000);
 
 		// извлекаем данные в зоне видимости
@@ -493,20 +493,15 @@ public class superAIyah implements Bot {
 				int rand = (int) (Math.random() * 100);
 				target = (rand % 2 == 0);
 			}
-			System.out.println("EXPLORE to this point!");
 			if (target) {
 				Point farest = weightedPoint();
-				System.out.println(farest);
 				best = explore(us, farest); // идем в еще неисследованную территорию
 			} else {
 				best = explore(us, null); // выбираем ближайшую неисследованную точку
 			}
 			return best;
 		}
-		output.InverseY(exploreMap, w, h,"Explore");
 		Move best = safeEat(us, coins);
-		if (upd.getRound() == 500)
-			System.out.println(upd.getBotCoins().get(0));
 		return best;
 	}
 
