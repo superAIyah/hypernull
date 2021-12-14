@@ -3,13 +3,11 @@ package ru.croccode.hypernull.bot;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.sql.SQLOutput;
 import java.util.*;
-import ru.croccode.hypernull.bot.math.Vector;
+
 import ru.croccode.hypernull.bot.debug.*;
 
 
-import org.w3c.dom.ls.LSOutput;
 import ru.croccode.hypernull.domain.MatchMode;
 import ru.croccode.hypernull.geometry.Offset;
 import ru.croccode.hypernull.geometry.Point;
@@ -22,12 +20,10 @@ import ru.croccode.hypernull.message.Move;
 import ru.croccode.hypernull.message.Register;
 import ru.croccode.hypernull.message.Update;
 
-import javax.swing.*;
-
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
-public class StarterBot implements Bot {
+public class superAIyah implements Bot {
 
 	private static final Random rnd = new Random(System.currentTimeMillis());
 
@@ -42,7 +38,7 @@ public class StarterBot implements Bot {
 	Map<Integer, Point> bots;
 
 	//MY PART OF BOT
-	final int LEN_CYCLE = 5;
+	final int LEN_CYCLE = 10;
 	final int DEPTH_COUNTING = 3;
 	final int PERIOD = 30;
 	final int TRAVEL_STEPS = 7;
@@ -61,6 +57,14 @@ public class StarterBot implements Bot {
 	int mr2;
 	LinkedList<Point> cycle;
 	Point nextToExplore;
+	//deathmatch
+	MatchMode DEATHMATCH;
+	int myId;
+	int myCoins;
+	int huntSteps;
+	Map<Integer, Point> botsCoordinates;
+	Map<Integer, Integer> botsCoins;
+	ArrayList<Point> nearby;
 
 	boolean timeToTravel(int num) {
 		return  (num % (PERIOD + TRAVEL_STEPS) >= PERIOD);
@@ -87,7 +91,7 @@ public class StarterBot implements Bot {
 		for (int i = 0; i < w; i++) {
 			for (int j = 0; j < h; j++) {
 				Point next = new Point(i, j);
-				if (us.offsetTo(next, mapSize).length2() <= vr2) {
+				if (us.offsetTo(next, mapSize).length2() <= mr2) {
 					coords.add(next);
 				}
 			}
@@ -121,12 +125,12 @@ public class StarterBot implements Bot {
 	}
 
 	Offset findBest(Point us, ArrayList<Offset> steps) { // найти лучший путь простым перебором по всем шагам
-		int mindist = 1000;
+		int mindist = 1001;
 		Offset bestStep = steps.get(0);
 		for (Offset step : steps) {
 			Point p2 = us.apply(step, mapSize);
 			int dist = p2.offsetTo(nextToExplore, mapSize).length2();
-			if (dist < mindist && !cycle.contains(p2)) {
+			if (mindist == 1001 || (dist < mindist && !cycle.contains(p2))) {
 				mindist = dist;
 				bestStep = step;
 			}
@@ -165,6 +169,7 @@ public class StarterBot implements Bot {
 		return move;
 	}
 
+	// универсальный бфс: us - стартовая позиция | ourId - индекс в массиве расстояний distCoins |
 	void coinsBFS(Point us, int ourId, int[][] distCoins, Map<Point, Integer> ids) {
 		int[][] dist = new int[h][w]; // локальная карта расстояний для bfs
 		boolean[][] used = new boolean[h][w]; // использованный точки для bfs
@@ -216,15 +221,15 @@ public class StarterBot implements Bot {
 			return 1000;
 		int n = distCoins[0].length;
 		int[][] distFromBot2d = new int[1][n];
-		coinsBFS(p, 0, distFromBot2d, ids);
+		coinsBFS(p, 0, distFromBot2d, ids); // определим расстояние от бота до всех монет
 		int[] distFromBot = distFromBot2d[0];
 
-		int depth = min(n, DEPTH_COUNTING);
+		int depth = min(n, DEPTH_COUNTING); // кол-во монет на которое мы просчитываем вперед
 		return gen(-1, depth, 0, distCoins, distFromBot, new boolean[n]);
 	}
 
 	Move safeEat(Point us, Point[] coins) {
-		if (coins == null || coins.length == 0)
+		if (coins == null || coins.length == 0) // если поблизости нет монет, исследуем ближайшую область
 			return explore(us, null);
 
 		int n = coins.length;
@@ -241,7 +246,7 @@ public class StarterBot implements Bot {
 
 		ArrayList<Offset> steps = variants(us); // варианты куда можно пойти
 		Offset bestStep = new Offset(1, 1);
-		int minDist = 1000;
+		int minDist = 1001;
 		for (Offset step : steps) {
 			Point p2 = us.apply(step, mapSize);
 			int distTmp = SummaryDistance(p2, distCoins, ids);
@@ -252,12 +257,10 @@ public class StarterBot implements Bot {
 		}
 		Move move = new Move();
 		move.setOffset(bestStep);
-		/*System.out.println("MIN DIST FOR GETTING 3 coins:");
-		System.out.println(minDist);*/
 		return move;
 	}
 
-	void fillWeightedMap(Point us) {
+	void fillWeightedMap(Point us) { // добавим веса точкам, в которых не были; обнулим посещеннын
 		for (int i = 0; i < h; i++) {
 			for (int j = 0; j < w; j++) {
 				int length2 = us.offsetTo(new Point(j, i), mapSize).length2();
@@ -271,7 +274,7 @@ public class StarterBot implements Bot {
 		}
 	}
 
-	Point weightedPoint() {
+	Point weightedPoint() { // найти центр самой удаленной области
 		int bestSum = -1;
 		Point bestPoint = new Point(0, 0);
 		for (int i = 0; i < h; i++) {
@@ -313,10 +316,98 @@ public class StarterBot implements Bot {
 			setVision(bots.get(key), 3);
 		}
 		setVision(us, 8);
-
 	}
 
-	public StarterBot(MatchMode mode) {
+	ArrayList<Integer> getDangerous(Point us) {
+		ArrayList<Integer> ids = new ArrayList<>();
+		for (Integer id : botsCoordinates.keySet()) {
+			if (id == myId)
+				continue;
+			if (botsCoins.get(id) > myCoins)
+				ids.add(id);
+		}
+		return ids;
+	}
+
+	ArrayList<Integer> numTarget(Point us) {
+		ArrayList<Integer> ids = new ArrayList<>();
+		for (Integer id : botsCoordinates.keySet()) {
+			if (id == myId)
+				continue;
+			if (botsCoins.get(id) < myCoins)
+				ids.add(id);
+		}
+		return ids;
+	}
+
+	// универсальный бфс: us - стартовая позиция | ourId - индекс в массиве расстояний distCoins |
+	//void coinsBFS(Point us, int ourId, int[][] distCoins, Map<Point, Integer> ids) {
+	int countDistBots(Point p, ArrayList<Integer> danger) { // посчитать сумму расстояний от точки до ботов
+		int n = danger.size();
+		int[][] distBots = new int[1][n];
+		Map<Point, Integer> ids = new HashMap<>();
+		ArrayList<Point> bots = new ArrayList<>();
+		for (int key : danger) {
+			bots.add(botsCoordinates.get(key));
+		}
+		for (int i = 0; i < n; i++)
+			ids.put(bots.get(i), i);
+		coinsBFS(p, 0, distBots, ids);
+		int sum = 0;
+		for (int i = 0; i < n; i++)
+			sum += distBots[0][i];
+		return sum;
+	}
+
+	Move run(Point us, ArrayList<Integer> danger) {
+		ArrayList<Offset> vars = variants(us); // все легальные варианты шага
+		ArrayList<Offset> clearVars = new ArrayList<>(); // все варианты шага, чтобы не идти в сторону стен
+		for (Offset step : vars)
+			if (clearWay(us, step))
+				clearVars.add(step);
+		if (clearVars.isEmpty()) // если все шаги на пути к стенам, то выберем из всех клеток
+			clearVars.addAll(vars);
+
+		int maxDist = -1; // сумма расстояний до опасных ботов
+		Offset bestStep = new Offset(1, 1); // шаг, чтобы убежать от опасности
+		for (Offset step : clearVars) {
+			Point p2 = us.apply(step, mapSize);
+			int dangerTmp = countDistBots(p2, danger); // опасность как сумма расстояний до опасных ботов
+			if (dangerTmp > maxDist) {
+				maxDist = dangerTmp;
+				bestStep = step;
+			}
+		}
+		Move move = new Move();
+		move.setOffset(bestStep);
+		return move;
+	}
+
+	Move hunt(Point us, ArrayList<Integer> target) {
+		ArrayList<Offset> vars = variants(us); // все легальные варианты шага
+		ArrayList<Offset> clearVars = new ArrayList<>(); // все варианты шага, чтобы не идти в сторону стен
+		for (Offset step : vars)
+			if (clearWay(us, step))
+				clearVars.add(step);
+		if (clearVars.isEmpty()) // если все шаги на пути к стенам, то выберем из всех клеток
+			clearVars.addAll(vars);
+
+		int minDist = 1000; // сумма расстояний до добычи
+		Offset bestStep = new Offset(1, 1); // шаг, чтобы настичь жертву
+		for (Offset step : clearVars) {
+			Point p2 = us.apply(step, mapSize);
+			int dangerTmp = countDistBots(p2, target); // потенциал атаки как сумма расстояний до жертв
+			if (dangerTmp < minDist) {
+				minDist = dangerTmp;
+				bestStep = step;
+			}
+		}
+		Move move = new Move();
+		move.setOffset(bestStep);
+		return move;
+	}
+
+	public superAIyah(MatchMode mode) {
 		this.mode = mode;
 	}
 
@@ -329,9 +420,10 @@ public class StarterBot implements Bot {
 	}
 
 	@Override
-	public void onMatchStarted(MatchStarted matchStarted) { // ---CHANGE---
+	public void onMatchStarted(MatchStarted matchStarted) {
 		ms = matchStarted; // сохраним всю информацию
-
+		DEATHMATCH = matchStarted.getMode();
+		int huntSteps = 0;
 		vr = matchStarted.getViewRadius();
 		vr2 = vr * vr;
 		mr = matchStarted.getMiningRadius();
@@ -342,12 +434,13 @@ public class StarterBot implements Bot {
 		exploreMap = new Integer[h][w];
 		vision = new Integer[h][w];
 		weightedMap = new int[h][w];
+		myId = matchStarted.getYourId();
 		for (int i = 0; i < h; i++)
 			for (int j = 0; j < w; j++)
 				Arrays.fill(exploreMap[i], 0);
 		cycle = new LinkedList<>();
 		for (int i = 0; i < LEN_CYCLE; i++)
-			cycle.add(new Point(-1, -1));;
+			cycle.add(new Point(0, 0));;
 	}
 
 	@Override
@@ -363,7 +456,7 @@ public class StarterBot implements Bot {
 		bots= upd.getBots(); // всегда будет хотя бы один бот - наш
 		Point us = bots.get(0);
 
-		// обновим последние три хода
+		// обновим последние LEN_CYCLE ходов
 		cycle.add(us);
 		cycle.remove();
 
@@ -372,6 +465,25 @@ public class StarterBot implements Bot {
 
 		//заполним взвешенную карту посещений
 		fillWeightedMap(us);
+
+		//DEATHMATCH PART
+		if (!mode.toString().equals("FRIENDLY")) {
+			myCoins = upd.getBotCoins().get(myId);
+			botsCoins = upd.getBotCoins();
+			botsCoordinates = upd.getBots();
+			for (Integer id : botsCoordinates.keySet())
+				if (id != myId)
+					nearby.add(botsCoordinates.get(id));
+			ArrayList<Integer> danger = getDangerous(us);
+			ArrayList<Integer> target = numTarget(us);
+			if (!danger.isEmpty() && huntSteps < 12) {
+				huntSteps++; // не будем гоняться за жертвой дольше 12 ходов
+				return run(us, danger);
+			}
+			huntSteps = 0;
+			if (!target.isEmpty())
+				return hunt(us, target);
+		}
 
 		//если время путешествий - значит найдем самую непосещенную область и пройдем туда TRAVEL_STEPS шагов
 		if (timeToTravel(upd.getRound())) {
@@ -382,7 +494,7 @@ public class StarterBot implements Bot {
 				target = (rand % 2 == 0);
 			}
 			System.out.println("EXPLORE to this point!");
-			if (true) {
+			if (target) {
 				Point farest = weightedPoint();
 				System.out.println(farest);
 				best = explore(us, farest); // идем в еще неисследованную территорию
@@ -393,24 +505,9 @@ public class StarterBot implements Bot {
 		}
 		output.InverseY(exploreMap, w, h,"Explore");
 		Move best = safeEat(us, coins);
-		//Move best = explore(us, null);
-		/*output.InverseY(vision, w, h, "VISION");
-		System.out.println();
-		output.InverseY(exploreMap, w, h, "EXPLORE MAP");*/
 		if (upd.getRound() == 500)
 			System.out.println(upd.getBotCoins().get(0));
 		return best;
-		/*if (moveOffset == null || moveCounter > 5 + rnd.nextInt(5)) {
-			moveOffset = new Offset(
-					rnd.nextInt(3) - 1,
-					rnd.nextInt(3) - 1
-			);
-			moveCounter = 0;
-		}
-		moveCounter++;
-		Move move = new Move();
-		move.setOffset(moveOffset);
-		return move;*/
 	}
 
 	@Override
@@ -424,7 +521,7 @@ public class StarterBot implements Bot {
 		socket.connect(new InetSocketAddress("localhost", 2021));
 
 		SocketSession session = new SocketSession(socket);
-		StarterBot bot = new StarterBot(MatchMode.FRIENDLY);
+		superAIyah bot = new superAIyah(MatchMode.FRIENDLY);
 		new BotMatchRunner(bot, session).run();
 	}
 }
